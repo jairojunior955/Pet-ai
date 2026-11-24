@@ -1,6 +1,9 @@
 from ursina import *
 from ursina.models.procedural.cone import Cone
+from game.states import PetState
+
 import math
+import random
 
 class Fox(Entity):
 
@@ -15,6 +18,13 @@ class Fox(Entity):
         self.black = color.rgb32(25, 25, 25)
 
         self.elapsed_time = 0
+        self.state = PetState.IDLE
+        self.state_timer = 0
+        self.state_duration = 3
+        self.move_speed = 1.5
+        self.rotation_speed = 5
+        self.world_limit = 4
+        self.target_position = Vec3(*position)
 
         self.visual = Entity(parent=self)
 
@@ -134,23 +144,32 @@ class Fox(Entity):
         for x in [-0.34, 0.34]:
             for z in [-0.38, 0.38]:
 
+                # Pivô da pata
                 leg = Entity(
                     parent=self.visual,
+                    position=(x, 0.55, z)
+                )
+
+                # Parte superior
+                Entity(
+                    parent=leg,
                     model='sphere',
                     color=self.dark_orange,
                     scale=(0.28, 0.58, 0.30),
-                    position=(x, 0.34, z)
+                    position=(0, -0.21, 0)
                 )
 
+                # Pé
                 Entity(
-                    parent=self.visual,
+                    parent=leg,
                     model='sphere',
                     color=self.dark,
                     scale=(0.31, 0.23, 0.37),
-                    position=(x, 0.115, z - 0.04)
+                    position=(0, -0.435, -0.04)
                 )
 
                 self.legs.append(leg)
+
 
     def create_tail(self):
 
@@ -180,9 +199,98 @@ class Fox(Entity):
             rotation_x=-20
         )
 
-    def update(self):
+    def change_state(self, new_state):
 
-        self.elapsed_time += time.dt
+        self.state = new_state
+        self.state_timer = 0
+
+        if new_state == PetState.IDLE:
+
+            self.state_duration = random.uniform(2, 5)
+
+        elif new_state == PetState.WALKING:
+
+            self.choose_target()
+
+        elif new_state == PetState.RESTING:
+
+            self.state_duration = random.uniform(5, 10)
+
+        print(f"Estado atual: {self.state.value}")
+
+    def choose_target(self):
+
+        x = random.uniform(
+            -self.world_limit,
+            self.world_limit
+        )
+
+        z = random.uniform(
+            -self.world_limit,
+            self.world_limit
+        )
+
+        self.target_position = Vec3(x, 0, z)
+
+        print(f"Novo destino: {self.target_position}")
+
+    def choose_next_action(self):
+
+        next_state = random.choices(
+            [
+                PetState.WALKING,
+                PetState.RESTING
+            ],
+            weights=[75, 25],
+            k=1
+        )[0]
+
+        self.change_state(next_state)
+
+    
+    def walk(self):
+
+        direction = self.target_position - self.position
+        direction.y = 0
+
+        remaining_distance = direction.length()
+
+        # Verificar se chegou ao destino
+        if remaining_distance < 0.15:
+
+            self.change_state(PetState.IDLE)
+            return
+
+        direction = direction.normalized()
+
+        # Movimento com velocidade constante
+        movement = min(
+            self.move_speed * time.dt,
+            remaining_distance
+        )
+
+        self.position += direction * movement
+
+        # Calcular rotação desejada
+        target_rotation = math.degrees(
+            math.atan2(-direction.x, -direction.z)
+        )
+
+        # Encontrar o menor ângulo de rotação
+        angle_difference = (
+            target_rotation
+            - self.rotation_y
+            + 180
+        ) % 360 - 180
+
+        # Rotação suave
+        self.rotation_y += angle_difference * min(
+            time.dt * self.rotation_speed,
+            1
+        )
+
+    
+    def animate_pet(self):
 
         # Respiração
         breathing = math.sin(
@@ -191,13 +299,73 @@ class Fox(Entity):
 
         self.visual.scale_y = 1 + breathing
 
-        # Movimento suave da cauda
+        # Movimento da cauda
         self.tail.rotation_y = math.sin(
             self.elapsed_time * 2
         ) * 15
 
-        # Piscar os olhos a cada quatro segundos
+        # Animação dos olhos
         blinking = self.elapsed_time % 4 < 0.12
 
         for eye in self.eyes:
-            eye.scale_y = 0.015 if blinking else 0.19
+
+            if self.state == PetState.RESTING:
+                eye.scale_y = 0.015
+            else:
+                eye.scale_y = 0.015 if blinking else 0.19
+
+        if self.state == PetState.WALKING:
+
+            # Balanço do corpo
+            self.visual.y = abs(
+                math.sin(self.elapsed_time * 8)
+            ) * 0.06
+
+            # Animação das patas
+            phases = [0, math.pi, math.pi, 0]
+
+            for i, leg in enumerate(self.legs):
+
+                leg.rotation_x = math.sin(
+                    self.elapsed_time * 8 + phases[i]
+                ) * 25
+
+        else:
+
+            # Retornar à posição original
+            self.visual.y = lerp(
+                self.visual.y,
+                0,
+                min(time.dt * 5, 1)
+            )
+
+            for leg in self.legs:
+
+                leg.rotation_x = lerp(
+                    leg.rotation_x,
+                    0,
+                    min(time.dt * 5, 1)
+                )
+
+    def update(self):
+
+        self.elapsed_time += time.dt
+        self.state_timer += time.dt
+
+        if self.state == PetState.IDLE:
+
+            if self.state_timer >= self.state_duration:
+
+                self.choose_next_action()
+
+        elif self.state == PetState.WALKING:
+
+            self.walk()
+
+        elif self.state == PetState.RESTING:
+
+            if self.state_timer >= self.state_duration:
+
+                self.change_state(PetState.IDLE)
+
+        self.animate_pet()
