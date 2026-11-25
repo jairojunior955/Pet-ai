@@ -3,6 +3,7 @@ from ursina.shaders import lit_with_shadows_shader, unlit_shader
 
 from game.world import World
 from game.pet import Fox
+from game.ui import PetUI
 
 app = Ursina()
 
@@ -25,13 +26,17 @@ AmbientLight(
 sun = DirectionalLight(shadows=True)
 sun.look_at(Vec3(1, -1, -1))
 
+# Pet
 fox = Fox(
     position=(0, 0, 0)
 )
 
+# Interface de estados e posição
+pet_ui = PetUI(fox)
+
 EditorCamera()
 
-camera.position = (4, 3, -6)
+camera.position = (4, 5, -10)
 camera.look_at(Vec3(0, 0.9, 0))
 
 app.run()

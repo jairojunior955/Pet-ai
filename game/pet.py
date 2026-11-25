@@ -216,7 +216,7 @@ class Fox(Entity):
 
             self.state_duration = random.uniform(5, 10)
 
-        print(f"Estado atual: {self.state.value}")
+        #print(f"Estado atual: {self.state.value}")
 
     def choose_target(self):
 
